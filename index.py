@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import simpson
 
+%matplotlib qt
+
 fig1, ax1 = plt.subplots(1)
 fig2, ax2 = plt.subplots(1)
 fig3, ax3 = plt.subplots(1)
@@ -9,7 +11,8 @@ fig4, ax4 = plt.subplots(1)
 fig1.tight_layout()
 
 #solve the second order differential equation for the soliton,
-def action_der(x, v, t, w):
+
+def energy_density(x, v, t, w):
     return (0.5*v**2 + potential_corr(x, w))
 
 def potential(x,w): 
@@ -19,7 +22,7 @@ def potential_derivative(x,w):
     return x*(x**2-1) + w
 
 def potential_corr(x, E):
-    x_plus = Newton_Raphson(2, E, 100)
+    x_plus = Newton_Raphson(1, E, 100)
     return potential(x, E) - potential(x_plus, E)
 
 def potential_sec_der(x, w):
@@ -71,23 +74,18 @@ def IntBisec(a_u, a_o, E, N):
     return amid
 
 # Fundamental values we require:
-N = 20
-
-E = np.linspace(0.05, 0.16, N)
+N = 200
+E = np.linspace(0.00000001, 0.0001, N)
 
 # Initial conditions for the Runge-Kutta algorithm.
 t0 = 1e-15
 v0 = 0
-dt = 0.1
-t_range = 60
+dt = 0.01
+t_range = 25
 
 S_Euclidean = []
+R = []
 
-def dE_dx(func, x, E):
-    return np.sqrt(func(x,E))
-
-def potential_num_w(E, x): 
-    return (1/3)*x**3 - (1+2*E)*x + 2*E*(1+2*E)*np.log(1+x)
 
 t_ends = []
 phase_integral_array = []
@@ -96,18 +94,22 @@ for i in range(N):
     
     x_range = 2
     
-    a_u = -0.3
-    a_o = Newton_Raphson(-1, E[i], 10)
+    
+    if E[i] == 0: 
+        a_mid =-0.99
+    else: 
+        a_u = -0.1
+        a_o = Newton_Raphson(-0.9, E[i], 1)
+    
     a_mid = IntBisec(a_u, a_o, E[i], 100)
-    
+        
     phi_mid = RK_22(a_mid, t0, v0, t_range, x_range, E[i])
-    
     x_pot = np.linspace(-1.5,1.5,100)
 
     t = phi_mid[0]
     x = phi_mid[1]
     v = phi_mid[-1]
-
+    
     #search algorithm
     n = 0
     for j in range(len(t)): 
@@ -117,28 +119,48 @@ for i in range(N):
             break
         
     
-    t_cut = t[:50]
-    x_cut = x[:50]
-    v_cut = v[:50]
+    t_cut = t[:1900]
+    x_cut = x[:1900]
+    v_cut = v[:1900]
 
-    
-    
-    dB_dr = action_der(x_cut, v_cut, t_cut, E[i])
+
+    for k in np.arange(0, len(x_cut) - 1):
+        if np.sign(x_cut[k]) != np.sign(x_cut[k + 1]):
+            m = round(k)
+            break
+
+    R_i = 0.5 * (t_cut[m] + t_cut[m + 1])
+    R.append(R_i)
+
+    dE_dr = energy_density(x_cut, v_cut, t_cut, E[i])
     
     ax1.plot(t_cut, x_cut, label="$\epsilon/\lambda\eta^4$ = " + str(np.round(E[i], 3)))
-    ax2.plot(t_cut, dB_dr)
+    ax2.plot(t_cut, dE_dr)
     
-    S_e = simpson(dB_dr, dx=0.1)
-    S_Euclidean.append(S_e)
+    energy = simpson(dE_dr, dx=0.01)
+    S_Euclidean.append(energy)
+    
+
+def Z(E): 
+    return np.sqrt(2*E)
+
+def arcsech(x): 
+    return np.log(1/x + np.sqrt(1/(x**2) - 1))
 
 
-ax3.plot(E, S_Euclidean, label="numerical decay amplitude")
-#ax3.plot(E, 1/E, label="analytic approx.")
+#Z_2 kink solution:
+ax3.axhline(2*np.sqrt(2)/3, label="$Z_2$ kink energy", linestyle="--", color="k")
+#ax3.plot(E, (2*np.sqrt(2)/3)*np.sqrt(1-Z(E)**2)*(2-Z(E)**2) - 2*np.sqrt(2)*E*arcsech(Z(E)), label="akink energy (full app.)", linestyle="-.")
+ax3.plot(E, 2*np.sqrt(2)/3 + (np.log(4*E) - (1/3))*E/np.sqrt(2), label="akink energy (analytical)", linestyle="-.")
 
+ax3.plot(E, S_Euclidean, label="akink energy (numerical)")
 
+ax4.plot(R, S_Euclidean)
+ax4.set_ylabel("$E/\lambda\eta^3$", size=20)
+ax4.set_xlabel('$R/\eta\lambda^{1/2}$', size=20)
 """___________________________________Styles_______________________________"""
 s=11
-ax1.set_ylim(-1.1, 1)
+ax1.set_ylim(-1.1, 1.1)
 #ax1.set_xlim(0, 30)
 ax1.tick_params(axis='both', which='major', labelsize=s)
 ax1.set_title('Several kink solutions with different $\epsilon$')
@@ -149,18 +171,12 @@ ax1.grid()
 ax2.set_title('Plots of $\sqrt{2V(\phi)}$ for different $\epsilon$')
 ax2.set_xlabel('$\eta\lambda^{1/2}$x', size=20)
 ax2.set_ylabel('$S_E\'$', size=20)
-ax2.set_xlim(0,5)
 ax2.grid()
 
-ax3.set_title("Plot of minimum energy of the kink vs. $\epsilon$")
-ax3.set_ylabel("$B$", size=20)
-ax3.set_xlabel("$\epsilon/\lambda\eta^4 $", size = 20)
+ax3.set_title("Plot of energy of the akink vs. $\epsilon$")
+ax3.set_ylabel("$E/\lambda\eta^3$", size=20)
+ax3.set_xlabel("$\epsilon/\lambda $", size = 20)
 ax3.grid()
-
-ax4.set_title("Phase space orbits of the kinks at different $\epsilon$")
-ax4.set_ylabel("$\phi'$", size=20)
-ax4.set_xlabel("$\phi$", size = 20)
-ax4.grid()
 
 ax1.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=s)
 ax3.legend(loc='center left', bbox_to_anchor=(1, 0.5), fontsize=s)
